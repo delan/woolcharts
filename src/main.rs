@@ -12,6 +12,7 @@ lazy_static::lazy_static! {
 
     static ref TOP: Regex = Regex::new("top:([^p]+)px").unwrap();
     static ref LEFT: Regex = Regex::new("left:([^p]+)px").unwrap();
+    static ref ITEM_NAME: Regex = Regex::new(" *(?:(?:[*]|[~]|[(]Sub[)]) )*(.+)").unwrap();
 }
 
 fn main() -> eyre::Result<()> {
@@ -118,9 +119,7 @@ fn dump(path: &str) -> eyre::Result<Vec<(String, String, String)>> {
             let text = text.replace("\u{A0}", " ");
             let mut text = &*text;
             if i == 1 {
-                text = text.strip_prefix("* ").unwrap_or(&text);
-                text = text.strip_prefix("   ~ ").unwrap_or(&text);
-                text = text.strip_prefix("   (Sub) ").unwrap_or(&text);
+                text = ITEM_NAME.captures(text).unwrap().get(1).unwrap().as_str();
             }
             item.push(Some(text.to_owned()));
             prev_column_index = i;
