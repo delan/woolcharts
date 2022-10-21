@@ -126,6 +126,12 @@ fn dump(path: &str) -> eyre::Result<Vec<(String, String, String)>> {
             prev_column_index = i;
         }
     }
+    if !item.is_empty() {
+        while item.len() < COLUMNS {
+            item.push(None);
+        }
+        items.push(item);
+    }
 
     let mut result = vec![];
     for item in &items {
