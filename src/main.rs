@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::{io::Read, fs::File, env::args};
 use std::str::FromStr;
 
+use chrono::{DateTime, FixedOffset};
 use regex::Regex;
 use scraper::{Html, Selector, ElementRef};
 
@@ -22,7 +23,10 @@ lazy_static::lazy_static! {
 
 struct Price(usize, usize);
 impl Price {
-    fn cents(cents: f64) -> Self {
+    fn cents(&self) -> f64 {
+        self.0 as f64 * 100.0 + self.1 as f64
+    }
+    fn from_cents(cents: f64) -> Self {
         Self((cents / 100.0) as _, (cents % 100.0) as _)
     }
     fn normalised(name: &str, price: &str) -> Self {
@@ -50,7 +54,7 @@ impl Price {
             panic!("price is $/Kg but name is meat")
         };
 
-        Self::cents(cents.parse::<f64>().unwrap() * factor)
+        Self::from_cents(cents.parse::<f64>().unwrap() * factor)
     }
 }
 impl Debug for Price {
@@ -70,16 +74,38 @@ fn main() -> eyre::Result<()> {
         }
     }
 
-    dbg!(items);
+    dbg!(&items);
+
+    let mut deltas = vec![];
+    for (name, points) in &items {
+        let (date1, price1) = points.iter().next().unwrap();
+        let (date2, price2) = points.iter().rev().next().unwrap();
+        let duration = date2.signed_duration_since(*date1);
+        if !duration.is_zero() {
+            let (price1, price2) = (price1.cents(), price2.cents());
+            let pp = (price2 - price1) / price1 * 100.0;
+            let days = duration.num_days();
+            let pp_per_day = pp / days as f64;
+            // eprintln!("{:+.2}% over {} days, {}", delta, duration, name);
+            deltas.push((pp, days, pp_per_day, name));
+        }
+    }
+    deltas.sort_by(|(_, _, pp, pn), (_, _, qp, qn)|
+        pp.total_cmp(qp).then(pn.cmp(qn)));
+
+    println!("change between first and last prices:");
+    for (pp, days, _, name) in deltas {
+        println!("{:+.2}% over {} days, {}", pp, days, name);
+    }
 
     Ok(())
 }
 
-fn dump(path: &str) -> eyre::Result<Vec<(String, String, Price)>> {
+fn dump(path: &str) -> eyre::Result<Vec<(DateTime<FixedOffset>, String, Price)>> {
     let mut input = String::default();
     File::open(path)?.read_to_string(&mut input)?;
     let input = Html::parse_fragment(&input);
-    let date = input.select(&DATE).next().unwrap().value().attr("content").unwrap();
+    let date = input.select(&DATE).next().unwrap().value().attr("content").unwrap().parse()?;
     dbg!(date);
 
     // Collect all of the text, ordered by CSS (top,left).
@@ -171,7 +197,7 @@ fn dump(path: &str) -> eyre::Result<Vec<(String, String, Price)>> {
             None => "_".to_owned(),
         }).collect::<Vec<_>>().join(", "));
         if let (Some(name), Some(price)) = (&item[1], &item[4]) {
-            result.push((date.to_owned(), name.clone(), Price::normalised(name, price)));
+            result.push((date, name.clone(), Price::normalised(name, price)));
         }
     }
 

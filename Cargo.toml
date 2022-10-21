@@ -4,6 +4,7 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
+chrono = "0.4.22"
 eyre = "0.6.8"
 lazy_static = "1.4.0"
 regex = "1.6.0"
