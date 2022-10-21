@@ -49,6 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             (4, "Supplied") => 5,
             (5, "Price") => 6,
             (6, "Amount") => 7,
+            (7, "Sub\u{A0}Total:") => 0,
             (7, x) if x.starts_with("Registered\u{A0}Office:\u{A0}") => 0,
             (0, _) => 0,
             (7, _) => 7,
