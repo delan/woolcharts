@@ -90,12 +90,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             while item.len() < i {
                 item.push(None);
             }
-            let text = match (i, text.replace("\u{A0}", " ")) {
-                (1, x) if x.starts_with("* ") => x[2..].to_owned(),
-                (1, x) if x.starts_with("   ~ ") => x[5..].to_owned(),
-                (_, x) => x,
-            };
-            item.push(Some(text));
+            let text = text.replace("\u{A0}", " ");
+            let mut text = &*text;
+            if i == 1 {
+                text = text.strip_prefix("* ").unwrap_or(&text);
+                text = text.strip_prefix("   ~ ").unwrap_or(&text);
+                text = text.strip_prefix("   (Sub) ").unwrap_or(&text);
+            }
+            item.push(Some(text.to_owned()));
             prev_column_index = i;
         }
     }
