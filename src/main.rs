@@ -86,7 +86,6 @@ fn main() -> eyre::Result<()> {
             let pp = (price2 - price1) / price1 * 100.0;
             let days = duration.num_days();
             let pp_per_day = pp / days as f64;
-            // eprintln!("{:+.2}% over {} days, {}", delta, duration, name);
             deltas.push((pp, days, pp_per_day, name));
         }
     }
@@ -94,8 +93,8 @@ fn main() -> eyre::Result<()> {
         pp.total_cmp(qp).then(pn.cmp(qn)));
 
     println!("change between first and last prices:");
-    for (pp, days, _, name) in deltas {
-        println!("{:+.2}% over {} days, {}", pp, days, name);
+    for (pp, days, pp_per_day, name) in deltas {
+        println!("{:+.2}% / {} days ({:+.4} pp/day), {}", pp, days, pp_per_day, name);
     }
 
     Ok(())
