@@ -1,0 +1,9 @@
+[package]
+name = "woolcharts"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+lazy_static = "1.4.0"
+regex = "1.6.0"
+scraper = "0.13.0"
