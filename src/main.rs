@@ -1,4 +1,5 @@
-use std::{io::{stdin, Read}, error::Error};
+use std::collections::BTreeMap;
+use std::{io::Read, fs::File, env::args};
 use std::str::FromStr;
 
 use regex::Regex;
@@ -13,9 +14,27 @@ lazy_static::lazy_static! {
     static ref LEFT: Regex = Regex::new("left:([^p]+)px").unwrap();
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> eyre::Result<()> {
+    let mut items = BTreeMap::default();
+
+    for path in args().skip(1) {
+        for (date, name, price) in dump(&dbg!(path))? {
+            items.entry(name)
+                .or_insert(BTreeMap::default())
+                .insert(date, price);
+        }
+    }
+
+    dbg!(items);
+
+    Ok(())
+}
+
+fn dump(path: &str) -> eyre::Result<Vec<(String, String, String)>> {
+    const COLUMNS: usize = 6;
+
     let mut input = String::default();
-    stdin().lock().read_to_string(&mut input)?;
+    File::open(path)?.read_to_string(&mut input)?;
     let input = Html::parse_fragment(&input);
     let date = input.select(&DATE).next().unwrap().value().attr("content").unwrap();
     dbg!(date);
@@ -84,8 +103,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .min_by(|(_, p), (_, q)| p.total_cmp(q))
                 .unwrap().0;
             // eprintln!("{} {:?} {:?}", i, text, p.value());
-            if i <= prev_column_index && !item.is_empty() {
-                items.push(item);
+            if i <= prev_column_index {
+                if !item.is_empty() {
+                    while item.len() < COLUMNS {
+                        item.push(None);
+                    }
+                    items.push(item);
+                }
                 item = vec![];
             }
             while item.len() < i {
@@ -103,14 +127,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    let mut result = vec![];
     for item in &items {
         eprintln!("({})", item.iter().map(|x| match x {
             Some(x) => format!("{:?}", x),
             None => "_".to_owned(),
         }).collect::<Vec<_>>().join(", "));
+        if let (Some(name), Some(price)) = (&item[1], &item[4]) {
+            result.push((date.to_owned(), name.clone(), price.clone()));
+        }
     }
 
-    Ok(())
+    Ok(result)
 }
 
 fn coords(element: &ElementRef) -> (f64, f64) {
