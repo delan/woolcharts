@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 use std::{io::Read, fs::File, env::args};
 use std::str::FromStr;
 
@@ -13,6 +14,49 @@ lazy_static::lazy_static! {
     static ref TOP: Regex = Regex::new("top:([^p]+)px").unwrap();
     static ref LEFT: Regex = Regex::new("left:([^p]+)px").unwrap();
     static ref ITEM_NAME: Regex = Regex::new(" *(?:(?:[*]|[~]|[(]Sub[)]) )*(.+)").unwrap();
+
+    static ref MEAT: Regex = Regex::new("(?P<name>.+) (?:[^ ]+k?g) - (?P<factor>[^ ]+k?g)").unwrap();
+    static ref UNITLESS_PRICE: Regex = Regex::new("[$]([0-9]+[.][0-9][0-9])").unwrap();
+    static ref PRICE_PER_KG: Regex = Regex::new("[$]([0-9]+[.][0-9][0-9])/Kg").unwrap();
+}
+
+struct Price(usize, usize);
+impl Price {
+    fn cents(cents: f64) -> Self {
+        Self((cents / 100.0) as _, (cents % 100.0) as _)
+    }
+    fn normalised(name: &str, price: &str) -> Self {
+        let (cents, per_kg) = if let Some(x) = PRICE_PER_KG.captures(price) {
+            (x.get(1).unwrap().as_str().replace(".", ""), true)
+        } else if let Some(x) = UNITLESS_PRICE.captures(price) {
+            (x.get(1).unwrap().as_str().replace(".", ""), false)
+        } else {
+            panic!("bad price: {}", price)
+        };
+
+        let factor = if !per_kg {
+            1.0
+        } else if let Some(meat) = MEAT.captures(name) {
+            let factor = meat.name("factor").unwrap().as_str();
+            let factor = if let Some(x) = factor.strip_suffix("kg") {
+                x.parse::<f64>().unwrap()
+            } else if let Some(x) = factor.strip_suffix("g") {
+                x.parse::<f64>().unwrap() / 1000.0
+            } else {
+                unreachable!()
+            };
+            factor
+        } else {
+            panic!("price is $/Kg but name is meat")
+        };
+
+        Self::cents(cents.parse::<f64>().unwrap() * factor)
+    }
+}
+impl Debug for Price {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "${}.{:02}", self.0, self.1)
+    }
 }
 
 fn main() -> eyre::Result<()> {
@@ -31,9 +75,7 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
-fn dump(path: &str) -> eyre::Result<Vec<(String, String, String)>> {
-    const COLUMNS: usize = 6;
-
+fn dump(path: &str) -> eyre::Result<Vec<(String, String, Price)>> {
     let mut input = String::default();
     File::open(path)?.read_to_string(&mut input)?;
     let input = Html::parse_fragment(&input);
@@ -105,12 +147,7 @@ fn dump(path: &str) -> eyre::Result<Vec<(String, String, String)>> {
                 .unwrap().0;
             // eprintln!("{} {:?} {:?}", i, text, p.value());
             if i <= prev_column_index {
-                if !item.is_empty() {
-                    while item.len() < COLUMNS {
-                        item.push(None);
-                    }
-                    items.push(item);
-                }
+                add_item(item, &mut items);
                 item = vec![];
             }
             while item.len() < i {
@@ -125,12 +162,7 @@ fn dump(path: &str) -> eyre::Result<Vec<(String, String, String)>> {
             prev_column_index = i;
         }
     }
-    if !item.is_empty() {
-        while item.len() < COLUMNS {
-            item.push(None);
-        }
-        items.push(item);
-    }
+    add_item(item, &mut items);
 
     let mut result = vec![];
     for item in &items {
@@ -139,7 +171,7 @@ fn dump(path: &str) -> eyre::Result<Vec<(String, String, String)>> {
             None => "_".to_owned(),
         }).collect::<Vec<_>>().join(", "));
         if let (Some(name), Some(price)) = (&item[1], &item[4]) {
-            result.push((date.to_owned(), name.clone(), price.clone()));
+            result.push((date.to_owned(), name.clone(), Price::normalised(name, price)));
         }
     }
 
@@ -154,4 +186,15 @@ fn coords(element: &ElementRef) -> (f64, f64) {
     let y = f64::from_str(y).unwrap();
 
     (x, y)
+}
+
+fn add_item(mut item: Vec<Option<String>>, items: &mut Vec<Vec<Option<String>>>) {
+    const COLUMNS: usize = 6;
+    if item.is_empty() {
+        return;
+    }
+    while item.len() < COLUMNS {
+        item.push(None);
+    }
+    items.push(item);
 }
